@@ -2,12 +2,18 @@ import math
 import random
 import pygame
 import random
+import neat
 
 Width = 500   # 画面幅
 Height = 500  # 画面高さ
 
 Cols = 25
 Rows = 20
+
+WIN = pygame.display.set_mode((Width, Height))
+pygame.display.set_caption("Snake Game!!")
+
+gen = 0
 
 class Window:
     """ウィンドウの基本クラス"""
@@ -174,8 +180,9 @@ class Game():
     Game開始時に設定
     """
     def __init__(self):
-        self.surface = pygame.display.set_mode((Width, Height))
-        pygame.display.set_caption("Snake Game!!")
+        self.surface = WIN
+        # self.surface = pygame.display.set_mode((Width, Height))
+        # pygame.display.set_caption("Snake Game!!")
         self.snake = Snake(pos=(10,10), color=(255,0,0)) # Snakeの初期値、色を決定
         self.snake.addTail()                             # Snakeは最初2つのCubeを持っていることにする
         self.clock = pygame.time.Clock()
@@ -280,8 +287,49 @@ class Game():
                     break
                         
             self.allDraw()
-        
+
+def eval_genomes(genomes, config):
+    """
+    Snakeのシミュレーションを実行し、壁、フルーツ、自分の体の距離に応じた
+    距離を計算
+    """
+    global WIN, gen
+    win = WIN
+    gen += 1
+
+    nets = []
+    snakes = []
+    ge = []
+    for genome_id, genome in genomes:
+        genome.fitness = 0  # start with fitness level of 0
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        nets.append(net)
+        snakes.append(Snake(pos=(10,10), color=(255,0,0)))
+        ge.append(genome)
+
+def run(config_path):
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                         config_path)
+
+    # Create the population, which is the top-level object for a NEAT run.
+    p = neat.Population(config)
+
+    # Add a stdout reporter to show progress in the terminal.
+    p.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    p.add_reporter(stats)
+    #p.add_reporter(neat.Checkpointer(5))
+
+    # Run for up to 50 generations.
+    winner = p.run(eval_genomes, 50)
+
+    # show final stats
+    print('\nBest genome:\n{!s}'.format(winner))
 
 if __name__ == "__main__":
     game = Game()
     game.play()
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, 'config-feedforward.txt')
+    run(config_path)
