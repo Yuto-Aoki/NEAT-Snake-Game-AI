@@ -350,37 +350,52 @@ def getDistances(win, snake, fruit):
 
     return distances
 
-def move(snake, index, direction):
-    if index == 0:
-        change_to = 'UP'
-    elif index == 1:
-        change_to = 'DOWN'
-    elif index == 2:
-        change_to = 'LEFT'
-    elif index == 3:
-        change_to = 'RIGHT'
+def move(snake, index, pre_pos):
+    # if index == 0:
+    #     change_to = 'UP'
+    # elif index == 1:
+    #     change_to = 'DOWN'
+    # elif index == 2:
+    #     change_to = 'LEFT'
+    # elif index == 3:
+    #     change_to = 'RIGHT'
     
-    if change_to == 'UP' and direction != 'DOWN':
-        direction = 'UP'
-    if change_to == 'DOWN' and direction != 'UP':
-        direction = 'DOWN'
-    if change_to == 'LEFT' and direction != 'RIGHT':
-        direction = 'LEFT'
-    if change_to == 'RIGHT' and direction != 'LEFT':
-        direction = 'RIGHT'
+    # if change_to == 'UP' and direction != 'DOWN':
+    #     direction = 'UP'
+    # if change_to == 'DOWN' and direction != 'UP':
+    #     direction = 'DOWN'
+    # if change_to == 'LEFT' and direction != 'RIGHT':
+    #     direction = 'LEFT'
+    # if change_to == 'RIGHT' and direction != 'LEFT':
+    #     direction = 'RIGHT'
 
-    if direction == 'UP':     # 上に進む
+    # if direction == 'UP':     # 上に進む
+    #     snake.x = 0
+    #     snake.y = -1
+    # elif direction == 'DOWN':     # 下に進む
+    #     snake.x = 0
+    #     snake.y = 1
+    # elif direction == 'LEFT':       # 左に進む
+    #     snake.x = -1
+    #     snake.y = 0
+    # elif direction == 'RIGHT':     # 右に進む
+    #     snake.x = 1
+    #     snake.y = 0
+    if index == 0 and pre_pos != (0, 1):     # 上に進む
         snake.x = 0
         snake.y = -1
-    elif direction == 'DOWN':     # 下に進む
+    elif index == 1 and pre_pos != (0, -1):     # 下に進む
         snake.x = 0
         snake.y = 1
-    elif direction == 'LEFT':       # 左に進む
+    elif index == 2 and pre_pos != (1, 0):       # 左に進む
         snake.x = -1
         snake.y = 0
-    elif direction == 'RIGHT':     # 右に進む
+    elif index == 3 and pre_pos != (-1, 0):     # 右に進む
         snake.x = 1
         snake.y = 0
+    else:
+        snake.x = pre_pos[0]
+        snake.y = pre_pos[1]
     snake.turns[snake.head.pos[:]] = [snake.x, snake.y]
     
     for i, cube in enumerate(snake.body):
@@ -417,12 +432,13 @@ def eval_genomes(genomes, config):
     
     score = 0
     game = Game(snakes, fruits)
-    direction = 'RIGHT'
+    direction = 'LEFT'
     ticks = 0
-    max_ticks = 500
+    max_ticks = 300
     
     run = True
-    while run and len(snakes) > 0:
+    while run and len(game.snakes) > 0:
+        pygame.time.delay(50)
         game.clock.tick(50)
 
         for event in pygame.event.get():
@@ -437,47 +453,56 @@ def eval_genomes(genomes, config):
         #     if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():  # determine whether to use the first or second
         #         pipe_ind = 1                                                                 # pipe on the screen for neural network input
 
-        for x, (snake, fruit) in enumerate(zip(snakes, fruits)):  # give each bird a fitness of 0.1 for each frame it stays alive
+        for x, (snake, fruit) in enumerate(zip(game.snakes, game.fruits)):  # give each bird a fitness of 0.1 for each frame it stays alive
             ge[x].fitness += 0.01
 
             # fruit = Cube(game.randomFruit(Rows, snake), color=(0,255,0))
 
             # send bird location, top pipe location and bottom pipe location and determine from network whether to jump or not
             inputs = getDistances(win, snake, fruit.pos)
-            output = nets[snakes.index(snake)].activate(inputs)
+            output = nets[game.snakes.index(snake)].activate(inputs)
             softmax_result = neat.math_util.softmax(output)
             index = softmax_result.index(max(softmax_result))
 
-            move(snake, index, direction)
-        
-        for snake, fruit in zip(snakes, fruits):
+            pre_pos = (snake.x, snake.y)
+            move(snake, index, pre_pos)
+
+        for snake, fruit in zip(game.snakes, game.fruits):
             headPos = snake.head.pos
             if headPos[0] >= 20 or headPos[0] < 0 or headPos[1] >= 20 or headPos[1] < 0:
-                ge[snakes.index(snake)].fitness -= 5
-                drop_idx = snakes.index(snake)
+                ge[game.snakes.index(snake)].fitness -= 10
+                drop_idx = game.snakes.index(snake)
                 ge.pop(drop_idx)
-                snakes.pop(drop_idx)
-                fruits.pop(drop_idx)
-
+                game.snakes.pop(drop_idx)
+                game.fruits.pop(drop_idx)
+        
+        for snake, fruit in zip(game.snakes, game.fruits):
             if snake.body[0].pos == fruit.pos:
-                snake.addTail()
-                fruit = Cube(game.randomFruit(Rows, snake, fruit), color=(0,255,0))
-                ge[snakes.index(snake)].fitness += 10
-                
+                game.snakes[game.snakes.index(snake)].addTail()
+                # snake.addTail()
+                game.fruits[game.fruits.index(fruit)] = Cube(game.randomFruit(Rows, snake, fruit), color=(0,255,0))
+                ge[game.snakes.index(snake)].fitness += 20
+
+            elif withinRadiusOfFood(snake.body[0].pos, fruit.pos) < 3:
+                ge[game.snakes.index(snake)].fitness += 3
+            
+            elif withinRadiusOfFood(snake.body[0].pos, fruit.pos) < 5:
+                ge[game.snakes.index(snake)].fitness += 1
+
+        for snake, fruit in zip(game.snakes, game.fruits):            
             for x in range(len(snake.body)):
                 if snake.body[x].pos in list(map(lambda z: z.pos, snake.body[x+1:])):
-                    ge[snakes.index(snake)].fitness -= 5
-                    drop_idx = snakes.index(snake)
+                    ge[game.snakes.index(snake)].fitness -= 7
+                    drop_idx = game.snakes.index(snake)
                     ge.pop(drop_idx)
-                    snakes.pop(drop_idx)
-                    fruits.pop(drop_idx)
+                    game.snakes.pop(drop_idx)
+                    game.fruits.pop(drop_idx)
                     break
         if ticks > max_ticks:
             run = False
             for genome in ge:
-                genome.fitness -= 3
+                genome.fitness -= 20
         ticks += 1
-
 
         game.allDraw()
 
