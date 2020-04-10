@@ -1,3 +1,4 @@
+import os
 import math
 import random
 import pygame
@@ -179,14 +180,16 @@ class Game():
     """
     Game開始時に設定
     """
-    def __init__(self):
+    def __init__(self, snakes, fruits):
         self.surface = WIN
         # self.surface = pygame.display.set_mode((Width, Height))
         # pygame.display.set_caption("Snake Game!!")
-        self.snake = Snake(pos=(10,10), color=(255,0,0)) # Snakeの初期値、色を決定
-        self.snake.addTail()                             # Snakeは最初2つのCubeを持っていることにする
+        # self.snake = Snake(pos=(10,10), color=(255,0,0)) # Snakeの初期値、色を決定
+        self.snakes = snakes
+        # self.snake.addTail()                             # Snakeは最初2つのCubeを持っていることにする
         self.clock = pygame.time.Clock()
-        self.fruit = Cube(self.randomFruit(Rows, self.snake), color=(0,255,0)) # フルーツの色を決定、場所はランダム
+        self.fruits = fruits
+        # self.fruit = Cube(self.randomFruit(Rows, self.snake), color=(0,255,0)) # フルーツの色を決定、場所はランダム
     
     def drawGrid(self, width, rows, surface):
         """
@@ -202,7 +205,7 @@ class Game():
             pygame.draw.line(surface, (255, 255, 255), (x, 0), (x, width))
             pygame.draw.line(surface, (255, 255, 255), (0, y), (width, y))
     
-    def randomFruit(self, rows, snake):
+    def randomFruit(self, rows, snake, fruit):
         """
         ランダムにフルーツを決定
         """
@@ -212,6 +215,8 @@ class Game():
             x = random.randrange(1, rows-1)
             y = random.randrange(1, rows-1)
             if len(list(filter(lambda z: z.pos == (x, y), positions))) > 0:
+                continue
+            if x == fruit.pos[0] and y == fruit.pos[1]:
                 continue
             else:
                 break
@@ -223,8 +228,9 @@ class Game():
         """
         self.surface.fill((0,0,0))
         self.drawGrid(Width, Rows, self.surface) # Grid線描画
-        self.snake.draw(self.surface)            # Snake描画
-        self.fruit.draw(self.surface)            # Fruit描画
+        for snake, fruit in zip(self.snakes, self.fruits):
+            snake.draw(self.surface)            # Snake描画
+            fruit.draw(self.surface)            # Fruit描画
         pygame.display.update()
     
     def gameOver(self):
@@ -344,6 +350,50 @@ def getDistances(win, snake, fruit):
 
     return distances
 
+def move(snake, index, direction):
+    if index == 0:
+        change_to = 'UP'
+    elif index == 1:
+        change_to = 'DOWN'
+    elif index == 2:
+        change_to = 'LEFT'
+    elif index == 3:
+        change_to = 'RIGHT'
+    
+    if change_to == 'UP' and direction != 'DOWN':
+        direction = 'UP'
+    if change_to == 'DOWN' and direction != 'UP':
+        direction = 'DOWN'
+    if change_to == 'LEFT' and direction != 'RIGHT':
+        direction = 'LEFT'
+    if change_to == 'RIGHT' and direction != 'LEFT':
+        direction = 'RIGHT'
+
+    if direction == 'UP':     # 上に進む
+        snake.x = 0
+        snake.y = -1
+    elif direction == 'DOWN':     # 下に進む
+        snake.x = 0
+        snake.y = 1
+    elif direction == 'LEFT':       # 左に進む
+        snake.x = -1
+        snake.y = 0
+    elif direction == 'RIGHT':     # 右に進む
+        snake.x = 1
+        snake.y = 0
+    snake.turns[snake.head.pos[:]] = [snake.x, snake.y]
+    
+    for i, cube in enumerate(snake.body):
+        posision = cube.pos[:]
+        if posision in snake.turns:    # 曲がる動作をしていたら
+            turn = snake.turns[posision]
+            cube.move(x=turn[0], y=turn[1])
+            if i == len(snake.body) - 1:
+                snake.turns.pop(posision)
+        else:
+            cube.move(x=cube.x, y=cube.y)
+
+
 def eval_genomes(genomes, config):
     """
     Snakeのシミュレーションを実行し、壁、フルーツ、自分の体の距離に応じた
@@ -355,47 +405,82 @@ def eval_genomes(genomes, config):
 
     nets = []
     snakes = []
+    fruits = []
     ge = []
     for genome_id, genome in genomes:
         genome.fitness = 0  # start with fitness level of 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         nets.append(net)
         snakes.append(Snake(pos=(10,10), color=(255,0,0)))
+        fruits.append(Cube((5,5), color=(0,255,0)))
         ge.append(genome)
     
     score = 0
-    game = Game()
+    game = Game(snakes, fruits)
+    direction = 'RIGHT'
+    ticks = 0
+    max_ticks = 500
     
     run = True
     while run and len(snakes) > 0:
-        game.clock.tick(30)
+        game.clock.tick(50)
 
-        # for event in pygame.event.get():
-        #     if event.type == pygame.QUIT:
-        #         run = False
-        #         pygame.quit()
-        #         quit()
-        #         break
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+                pygame.quit()
+                quit()
+                break
 
         # pipe_ind = 0
         # if len(birds) > 0:
         #     if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():  # determine whether to use the first or second
         #         pipe_ind = 1                                                                 # pipe on the screen for neural network input
 
-        for x, snake in enumerate(snakes):  # give each bird a fitness of 0.1 for each frame it stays alive
-            ge[x].fitness += 0.1
-            game.snake.move()
+        for x, (snake, fruit) in enumerate(zip(snakes, fruits)):  # give each bird a fitness of 0.1 for each frame it stays alive
+            ge[x].fitness += 0.01
 
-            fruit = Cube(game.randomFruit(Rows, snake), color=(0,255,0))
+            # fruit = Cube(game.randomFruit(Rows, snake), color=(0,255,0))
 
             # send bird location, top pipe location and bottom pipe location and determine from network whether to jump or not
-            inputs = getDistances(win, snake, fruit)
-            output = nets[snakes.index(snake)].activate((bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
+            inputs = getDistances(win, snake, fruit.pos)
+            output = nets[snakes.index(snake)].activate(inputs)
+            softmax_result = neat.math_util.softmax(output)
+            index = softmax_result.index(max(softmax_result))
 
-            if output[0] > 0.5:  # we use a tanh activation function so result will be between -1 and 1. if over 0.5 jump
-                bird.jump()
+            move(snake, index, direction)
+        
+        for snake, fruit in zip(snakes, fruits):
+            headPos = snake.head.pos
+            if headPos[0] >= 20 or headPos[0] < 0 or headPos[1] >= 20 or headPos[1] < 0:
+                ge[snakes.index(snake)].fitness -= 5
+                drop_idx = snakes.index(snake)
+                ge.pop(drop_idx)
+                snakes.pop(drop_idx)
+                fruits.pop(drop_idx)
 
-        base.move()
+            if snake.body[0].pos == fruit.pos:
+                snake.addTail()
+                fruit = Cube(game.randomFruit(Rows, snake, fruit), color=(0,255,0))
+                ge[snakes.index(snake)].fitness += 10
+                
+            for x in range(len(snake.body)):
+                if snake.body[x].pos in list(map(lambda z: z.pos, snake.body[x+1:])):
+                    ge[snakes.index(snake)].fitness -= 5
+                    drop_idx = snakes.index(snake)
+                    ge.pop(drop_idx)
+                    snakes.pop(drop_idx)
+                    fruits.pop(drop_idx)
+                    break
+        if ticks > max_ticks:
+            run = False
+            for genome in ge:
+                genome.fitness -= 3
+        ticks += 1
+
+
+        game.allDraw()
+
 
 
 
@@ -420,8 +505,8 @@ def run(config_path):
     print('\nBest genome:\n{!s}'.format(winner))
 
 if __name__ == "__main__":
-    game = Game()
-    game.play()
+    # game = Game()
+    # game.play()
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'config-feedforward.txt')
     run(config_path)
