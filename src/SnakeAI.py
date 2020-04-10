@@ -288,6 +288,62 @@ class Game():
                         
             self.allDraw()
 
+def wallCollide(snake_pos):
+    if snake_pos[0] >= 20 or snake_pos[0] < 0 or snake_pos[1] >= 20 or snake_pos[1] < 0:
+        return True
+
+def bodyCollide(snake, pos):
+    for x in range(len(snake.body)):
+        if pos in list(map(lambda z: z.pos, snake.body[x+1:])):
+            return True
+
+def withinRadiusOfFood(pos, fruit):
+    return math.sqrt((pos[0] - fruit[0]) ** 2 + (pos[1] - fruit[1]) ** 2)
+
+def getDistances(win, snake, fruit):
+    # scale = Width // Rows # 1目盛り
+    pos = []
+    directions = ['NORTH', 'SOUTH', 'WEST', 'EAST', 'NORTHWEST', 'NORTHEAST', 'SOUTHWEST', 'SOUTHEAST']
+    distances = []
+    for mode in range(3):
+        for x, direction in enumerate(directions):
+            distance = 0
+            pos.clear()
+            pos.append(snake.head.x)
+            pos.append(snake.head.y)
+            while not wallCollide(pos):
+                if direction == 'NORTH':
+                    pos[1] -= 1
+                elif direction == 'SOUTH':
+                    pos[1] += 1
+                elif direction == 'WEST':
+                    pos[0] -= 1
+                elif direction == 'EAST':
+                    pos[0] += 1
+                elif direction == 'NORTHWEST':
+                    pos[1] -= 1
+                    pos[0] -= 1
+                elif direction == 'NORTHEAST':
+                    pos[1] -= 1
+                    pos[0] += 1
+                elif direction == 'SOUTHWEST':
+                    pos[1] += 1
+                    pos[0] -= 1
+                elif direction == 'SOUTHEAST':
+                    pos[1] += 1
+                    pos[0] += 1
+                if withinRadiusOfFood(pos, fruit) == 0 and mode == 1:
+                    break
+                if bodyCollide(snake, pos) and mode == 2:
+                    break
+                # if mode == 1:
+                #     pygame.draw.rect(win, green, pygame.Rect(pos[0], pos[1], 10, 10))
+                # pygame.display.update()
+                distance += 1
+            distances.append(distance)
+
+    return distances
+
 def eval_genomes(genomes, config):
     """
     Snakeのシミュレーションを実行し、壁、フルーツ、自分の体の距離に応じた
@@ -306,6 +362,42 @@ def eval_genomes(genomes, config):
         nets.append(net)
         snakes.append(Snake(pos=(10,10), color=(255,0,0)))
         ge.append(genome)
+    
+    score = 0
+    game = Game()
+    
+    run = True
+    while run and len(snakes) > 0:
+        game.clock.tick(30)
+
+        # for event in pygame.event.get():
+        #     if event.type == pygame.QUIT:
+        #         run = False
+        #         pygame.quit()
+        #         quit()
+        #         break
+
+        # pipe_ind = 0
+        # if len(birds) > 0:
+        #     if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():  # determine whether to use the first or second
+        #         pipe_ind = 1                                                                 # pipe on the screen for neural network input
+
+        for x, snake in enumerate(snakes):  # give each bird a fitness of 0.1 for each frame it stays alive
+            ge[x].fitness += 0.1
+            game.snake.move()
+
+            fruit = Cube(game.randomFruit(Rows, snake), color=(0,255,0))
+
+            # send bird location, top pipe location and bottom pipe location and determine from network whether to jump or not
+            inputs = getDistances(win, snake, fruit)
+            output = nets[snakes.index(snake)].activate((bird.y, abs(bird.y - pipes[pipe_ind].height), abs(bird.y - pipes[pipe_ind].bottom)))
+
+            if output[0] > 0.5:  # we use a tanh activation function so result will be between -1 and 1. if over 0.5 jump
+                bird.jump()
+
+        base.move()
+
+
 
 def run(config_path):
     config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
