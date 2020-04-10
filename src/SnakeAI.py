@@ -15,6 +15,7 @@ WIN = pygame.display.set_mode((Width, Height))
 pygame.display.set_caption("Snake Game!!")
 
 gen = 0
+inversion = False
 
 class Window:
     """ウィンドウの基本クラス"""
@@ -381,21 +382,31 @@ def move(snake, index, pre_pos):
     # elif direction == 'RIGHT':     # 右に進む
     #     snake.x = 1
     #     snake.y = 0
-    if index == 0 and pre_pos != (0, 1):     # 上に進む
+    global inversion
+    inversion = False
+    if index == 0:
+        if pre_pos == (0, 1):
+            inversion = True     # 上に進む
         snake.x = 0
         snake.y = -1
-    elif index == 1 and pre_pos != (0, -1):     # 下に進む
+    elif index == 1:
+        if pre_pos != (0, -1):
+            inversion = True     # 下に進む
         snake.x = 0
         snake.y = 1
-    elif index == 2 and pre_pos != (1, 0):       # 左に進む
+    elif index == 2:
+        if pre_pos != (1, 0):
+            inversion = True      # 左に進む
         snake.x = -1
         snake.y = 0
-    elif index == 3 and pre_pos != (-1, 0):     # 右に進む
+    elif index == 3:
+        if pre_pos != (-1, 0):
+            inversion = True     # 右に進む
         snake.x = 1
         snake.y = 0
-    else:
-        snake.x = pre_pos[0]
-        snake.y = pre_pos[1]
+    # else:
+    #     snake.x = 0
+    #     snake.y = 0
     snake.turns[snake.head.pos[:]] = [snake.x, snake.y]
     
     for i, cube in enumerate(snake.body):
@@ -422,12 +433,13 @@ def eval_genomes(genomes, config):
     snakes = []
     fruits = []
     ge = []
+    pos = (random.randrange(1, Rows-1), random.randrange(1, Rows-1))
     for genome_id, genome in genomes:
         genome.fitness = 0  # start with fitness level of 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         nets.append(net)
         snakes.append(Snake(pos=(10,10), color=(255,0,0)))
-        fruits.append(Cube((5,5), color=(0,255,0)))
+        fruits.append(Cube((5,15), color=(0,255,0)))
         ge.append(genome)
     
     score = 0
@@ -454,7 +466,7 @@ def eval_genomes(genomes, config):
         #         pipe_ind = 1                                                                 # pipe on the screen for neural network input
 
         for x, (snake, fruit) in enumerate(zip(game.snakes, game.fruits)):  # give each bird a fitness of 0.1 for each frame it stays alive
-            ge[x].fitness += 0.01
+            # ge[x].fitness += 0.01
 
             # fruit = Cube(game.randomFruit(Rows, snake), color=(0,255,0))
 
@@ -466,11 +478,13 @@ def eval_genomes(genomes, config):
 
             pre_pos = (snake.x, snake.y)
             move(snake, index, pre_pos)
+            if inversion:
+                ge[x].fitness -= 20
 
         for snake, fruit in zip(game.snakes, game.fruits):
             headPos = snake.head.pos
             if headPos[0] >= 20 or headPos[0] < 0 or headPos[1] >= 20 or headPos[1] < 0:
-                ge[game.snakes.index(snake)].fitness -= 10
+                ge[game.snakes.index(snake)].fitness -= 20
                 drop_idx = game.snakes.index(snake)
                 ge.pop(drop_idx)
                 game.snakes.pop(drop_idx)
@@ -481,18 +495,19 @@ def eval_genomes(genomes, config):
                 game.snakes[game.snakes.index(snake)].addTail()
                 # snake.addTail()
                 game.fruits[game.fruits.index(fruit)] = Cube(game.randomFruit(Rows, snake, fruit), color=(0,255,0))
-                ge[game.snakes.index(snake)].fitness += 20
+                ge[game.snakes.index(snake)].fitness += len(snake.body) * 20
 
             elif withinRadiusOfFood(snake.body[0].pos, fruit.pos) < 3:
-                ge[game.snakes.index(snake)].fitness += 3
-            
-            elif withinRadiusOfFood(snake.body[0].pos, fruit.pos) < 5:
-                ge[game.snakes.index(snake)].fitness += 1
+                ge[game.snakes.index(snake)].fitness += 10 + withinRadiusOfFood(snake.body[0].pos, fruit.pos)
+            else:
+                ge[game.snakes.index(snake)].fitness -= withinRadiusOfFood(snake.body[0].pos, fruit.pos)
+            # elif withinRadiusOfFood(snake.body[0].pos, fruit.pos) < 5:
+            #     ge[game.snakes.index(snake)].fitness += 1
 
         for snake, fruit in zip(game.snakes, game.fruits):            
             for x in range(len(snake.body)):
                 if snake.body[x].pos in list(map(lambda z: z.pos, snake.body[x+1:])):
-                    ge[game.snakes.index(snake)].fitness -= 7
+                    ge[game.snakes.index(snake)].fitness -= 5
                     drop_idx = game.snakes.index(snake)
                     ge.pop(drop_idx)
                     game.snakes.pop(drop_idx)
@@ -501,7 +516,7 @@ def eval_genomes(genomes, config):
         if ticks > max_ticks:
             run = False
             for genome in ge:
-                genome.fitness -= 20
+                genome.fitness -= 300
         ticks += 1
 
         game.allDraw()
@@ -524,7 +539,7 @@ def run(config_path):
     #p.add_reporter(neat.Checkpointer(5))
 
     # Run for up to 50 generations.
-    winner = p.run(eval_genomes, 50)
+    winner = p.run(eval_genomes, 200)
 
     # show final stats
     print('\nBest genome:\n{!s}'.format(winner))
