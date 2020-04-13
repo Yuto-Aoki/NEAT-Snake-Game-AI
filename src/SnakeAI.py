@@ -316,8 +316,8 @@ def getDistances(win, snake, fruit):
         for x, direction in enumerate(directions):
             distance = 0
             pos.clear()
-            pos.append(snake.head.x)
-            pos.append(snake.head.y)
+            pos.append(snake.head.pos[0])
+            pos.append(snake.head.pos[1])
             while not wallCollide(pos):
                 if direction == 'NORTH':
                     pos[1] -= 1
@@ -390,17 +390,17 @@ def move(snake, index, pre_pos):
         snake.x = 0
         snake.y = -1
     elif index == 1:
-        if pre_pos != (0, -1):
+        if pre_pos == (0, -1):
             inversion = True     # 下に進む
         snake.x = 0
         snake.y = 1
     elif index == 2:
-        if pre_pos != (1, 0):
+        if pre_pos == (1, 0):
             inversion = True      # 左に進む
         snake.x = -1
         snake.y = 0
     elif index == 3:
-        if pre_pos != (-1, 0):
+        if pre_pos == (-1, 0):
             inversion = True     # 右に進む
         snake.x = 1
         snake.y = 0
@@ -434,6 +434,8 @@ def eval_genomes(genomes, config):
     fruits = []
     ge = []
     pos = (random.randrange(1, Rows-1), random.randrange(1, Rows-1))
+    if pos == (10, 10):
+        pos = (15,15)
     for genome_id, genome in genomes:
         genome.fitness = 0  # start with fitness level of 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
@@ -484,7 +486,7 @@ def eval_genomes(genomes, config):
         for snake, fruit in zip(game.snakes, game.fruits):
             headPos = snake.head.pos
             if headPos[0] >= 20 or headPos[0] < 0 or headPos[1] >= 20 or headPos[1] < 0:
-                ge[game.snakes.index(snake)].fitness -= 2
+                ge[game.snakes.index(snake)].fitness -= 10
                 drop_idx = game.snakes.index(snake)
                 ge.pop(drop_idx)
                 game.snakes.pop(drop_idx)
@@ -495,10 +497,10 @@ def eval_genomes(genomes, config):
                 game.snakes[game.snakes.index(snake)].addTail()
                 # snake.addTail()
                 game.fruits[game.fruits.index(fruit)] = Cube(game.randomFruit(Rows, snake, fruit), color=(0,255,0))
-                ge[game.snakes.index(snake)].fitness += len(snake.body) * 3
+                ge[game.snakes.index(snake)].fitness += len(snake.body) * 5
 
             elif withinRadiusOfFood(snake.body[0].pos, fruit.pos) < 3:
-                ge[game.snakes.index(snake)].fitness += 1
+                ge[game.snakes.index(snake)].fitness += 2
             # else:
             #     ge[game.snakes.index(snake)].fitness -= withinRadiusOfFood(snake.body[0].pos, fruit.pos)
             # elif withinRadiusOfFood(snake.body[0].pos, fruit.pos) < 5:
@@ -539,7 +541,7 @@ def run(config_path):
     #p.add_reporter(neat.Checkpointer(5))
 
     # Run for up to 50 generations.
-    winner = p.run(eval_genomes, 200)
+    winner = p.run(eval_genomes, 400)
 
     # show final stats
     print('\nBest genome:\n{!s}'.format(winner))
